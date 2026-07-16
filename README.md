@@ -96,6 +96,33 @@ gotone/
 └── go.sum
 ```
 
+## Releasing
+
+This project uses gitflow:
+
+- **`main`** — stable releases (`v1.0.0`, `v1.0.1`)
+- **`develop`** — beta builds (`v1.0.0-beta.1`, `v1.0.0-beta.2`)
+- Feature branches off `develop`
+
+### Beta release
+
+```bash
+git checkout develop
+git tag v0.1.0-beta.1
+git push origin v0.1.0-beta.1
+```
+
+### Stable release
+
+```bash
+git checkout main
+git merge develop
+git tag v0.1.0
+git push origin v0.1.0
+```
+
+Both trigger a GitHub Actions build that produces binaries for macOS (arm64, amd64), Linux (amd64, arm64), and Windows (amd64). Beta tags are marked as pre-releases.
+
 ## License
 
 MIT
