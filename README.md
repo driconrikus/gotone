@@ -4,7 +4,7 @@ A lightweight, real-time audio monitor and router for your terminal. Route audio
 
 ## What it does
 
-GotOne takes audio from an input device (e.g. a guitar through your MOTU M4) and routes it to a specific output channel in real-time. Think of it as a terminal-based monitoring utility — the kind of thing your audio interface's control software does, but without the GUI.
+GotOne takes audio from an input device (e.g. a guitar through your Audio Interface) and routes it to a specific output channel in real-time. Think of it as a terminal-based monitoring utility — the kind of thing your audio interface's control software does, but without the GUI.
 
 ## Features
 
