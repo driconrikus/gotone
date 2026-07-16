@@ -1,4 +1,4 @@
-# gotone
+# GoTone - Audio Monitor
 
 A lightweight, real-time audio monitor and router for your terminal. Route audio from any input to any output channel with minimal latency.
 
