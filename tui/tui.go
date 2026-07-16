@@ -31,6 +31,7 @@ type TUI struct {
 
 	termWidth  int
 	termHeight int
+	showHelp   bool
 
 	mu sync.Mutex
 }
@@ -152,6 +153,9 @@ func (t *TUI) handleInput(b []byte) bool {
 		case 'm', 'M':
 			t.eng.ToggleMute()
 			return true
+		case 'h', 'H':
+			t.showHelp = !t.showHelp
+			return true
 		case ',':
 			newBuf := t.eng.FramesPerBuffer() * 2
 			if newBuf > 4096 {
@@ -244,6 +248,12 @@ func (t *TUI) renderFull() {
 	// Clear screen and home cursor
 	sb.WriteString("\033[H\033[2J")
 
+	if t.showHelp {
+		t.renderHelp(&sb)
+		os.Stdout.Write([]byte(sb.String()))
+		return
+	}
+
 	line := func(row int, s string) {
 		sb.WriteString(fmt.Sprintf("\033[%d;1H%s\033[K", row, s))
 	}
@@ -253,9 +263,11 @@ func (t *TUI) renderFull() {
 	// Header box
 	sb.WriteString("\033[1;36m")
 	title := "GOTONE  —  Audio Monitor"
-	titlePadding := bw - 2 - len(title)
-	if titlePadding < 0 {
-		titlePadding = 0
+	titlePadding := displayLen(title)
+	if titlePadding > bw-2 {
+		titlePadding = bw - 2
+	} else {
+		titlePadding = bw - 2 - titlePadding
 	}
 	leftPad := titlePadding / 2
 	rightPad := titlePadding - leftPad
@@ -301,15 +313,20 @@ func (t *TUI) renderFull() {
 	line(row, ""); row++
 
 	// Help bar
-	helpText := "  ↑/↓  Gain   ←/→  Channel   </>  Buffer   m  Mute   q  Quit"
+	helpText := "  ↑/↓  Gain   ←/→  Channel   </>  Buffer   m  Mute   h  Help   q  Quit"
+	helpTextLen := displayLen(helpText)
 	helpBoxWidth := bw
-	if helpBoxWidth < len(helpText)+4 {
-		helpBoxWidth = len(helpText) + 4
+	if helpBoxWidth < helpTextLen+4 {
+		helpBoxWidth = helpTextLen + 4
 	}
 	helpInner := helpBoxWidth - 2
-	helpContent := truncate(helpText, helpInner)
-	if len(helpContent) < helpInner {
-		helpContent += strings.Repeat(" ", helpInner-len(helpContent))
+	helpContent := helpText
+	if helpTextLen > helpInner {
+		helpContent = truncate(helpText, helpInner)
+	}
+	helpContentLen := displayLen(helpContent)
+	if helpContentLen < helpInner {
+		helpContent += strings.Repeat(" ", helpInner-helpContentLen)
 	}
 	sb.WriteString("\033[90m")
 	line(row, "  ┌"+strings.Repeat("─", helpInner)+"┐"); row++
@@ -324,6 +341,37 @@ func (t *TUI) renderFull() {
 	}
 
 	os.Stdout.Write([]byte(sb.String()))
+}
+
+func (t *TUI) renderHelp(sb *strings.Builder) {
+	bw := t.boxWidth()
+	lines := []string{
+		"",
+		"  \033[1m↑\033[0m/\033[1m↓\033[0m    Gain          Adjust level (+/- 1 dB)",
+		"  \033[1m←\033[0m/\033[1m→\033[0m    Channel       Change output channel",
+		"  \033[1m,\033[0m/\033[1m.\033[0m    Buffer        Increase/decrease buffer size",
+		"  \033[1mm\033[0m      Mute          Toggle mute on/off",
+		"  \033[1mh\033[0m      Help          Show/hide this help",
+		"  \033[1mq\033[0m      Quit          Exit the application",
+		"",
+		"  Press \033[1mh\033[0m to go back or \033[1mq\033[0m to close",
+	}
+	helpHeight := len(lines) + 2
+	startRow := (t.termHeight - helpHeight) / 2
+	if startRow < 1 {
+		startRow = 1
+	}
+
+	sb.WriteString("\033[1;33m")
+	top := "  ╔" + strings.Repeat("═", bw-2) + "╗"
+	sb.WriteString(fmt.Sprintf("\033[%d;1H%s\033[K", startRow, top))
+	for i, l := range lines {
+		padded := padBoxLine(l, bw-4)
+		sb.WriteString(fmt.Sprintf("\033[%d;1H  ║ %s ║\033[K", startRow+1+i, padded))
+	}
+	bot := "  ╚" + strings.Repeat("═", bw-2) + "╝"
+	sb.WriteString(fmt.Sprintf("\033[%d;1H%s\033[K", startRow+1+len(lines), bot))
+	sb.WriteString("\033[0m")
 }
 
 func (t *TUI) computePeaks(stats engine.Stats) float64 {
@@ -395,11 +443,50 @@ func renderMeter(level, peakVal float64, color string, meterWidth int) string {
 }
 
 func truncate(s string, max int) string {
-	if len(s) <= max {
+	vl := displayLen(s)
+	if vl <= max {
 		return s
 	}
 	if max < 3 {
-		return s[:max]
+		runes := []rune(s)
+		return string(runes[:max])
 	}
-	return s[:max-3] + "..."
+	runes := []rune(s)
+	return string(runes[:max-3]) + "..."
+}
+
+func stripANSI(s string) string {
+	var out strings.Builder
+	for i := 0; i < len(s); i++ {
+		if s[i] == '\033' && i+1 < len(s) && s[i+1] == '[' {
+			i += 2
+			for ; i < len(s); i++ {
+				if ch := s[i]; ch >= 'A' && ch <= 'Z' || ch >= 'a' && ch <= 'z' {
+					break
+				}
+			}
+			continue
+		}
+		out.WriteByte(s[i])
+	}
+	return out.String()
+}
+
+func displayLen(s string) int {
+	return len([]rune(s))
+}
+
+func padBoxLine(s string, width int) string {
+	vis := stripANSI(s)
+	vlen := displayLen(vis)
+	if vlen > width {
+		limit := width + (len(s) - len(vis))
+		if limit > len(s) {
+			limit = len(s)
+		}
+		s = s[:limit]
+		vis = stripANSI(s)
+		vlen = displayLen(vis)
+	}
+	return s + strings.Repeat(" ", width-vlen)
 }
