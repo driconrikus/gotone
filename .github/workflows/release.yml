@@ -21,6 +21,9 @@ jobs:
         with:
           go-version: '1.21'
 
+      - name: Install portaudio
+        run: brew install portaudio
+
       - name: Build
         run: |
           mkdir -p dist
@@ -28,6 +31,8 @@ jobs:
           CC=$(if [ "${{ matrix.arch }}" = "arm64" ]; then echo "cc"; else echo "cc -arch x86_64"; fi)
           CGO_ENABLED=1 GOOS=darwin GOARCH=${{ matrix.arch }} CC="$CC" \
             go build -ldflags="-s -w" -o "dist/${binary}" .
+        env:
+          PKG_CONFIG_PATH: /opt/homebrew/lib/pkgconfig
 
       - uses: actions/upload-artifact@v4
         with:
