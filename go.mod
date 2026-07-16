@@ -6,3 +6,5 @@ require (
 	github.com/gordonklaus/portaudio v0.0.0-20260203164431-765aa7dfa631
 	golang.org/x/sys v0.47.0
 )
+
+require golang.org/x/term v0.45.0 // indirect

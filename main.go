@@ -14,7 +14,7 @@ import (
 	"github.com/rvaldez/gotone/tui"
 )
 
-var version = "dev"
+var version = "0.1.0"
 
 func main() {
 	listDevices := flag.Bool("list-devices", false, "List available audio devices and exit")
@@ -98,12 +98,18 @@ func main() {
 
 	// Handle signals
 	sigCh := make(chan os.Signal, 1)
-	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
+	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM, syscall.SIGWINCH)
 	go func() {
-		<-sigCh
-		ui.Stop()
-		eng.Stop()
-		os.Exit(0)
+		for sig := range sigCh {
+			switch sig {
+			case syscall.SIGWINCH:
+				ui.NotifyResize()
+			default:
+				ui.Stop()
+				eng.Stop()
+				os.Exit(0)
+			}
+		}
 	}()
 
 	// Block until TUI signals quit

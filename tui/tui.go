@@ -3,49 +3,55 @@ package tui
 import (
 	"fmt"
 	"math"
+	"os"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/rvaldez/gotone/engine"
+	"golang.org/x/term"
 )
 
 const (
-	meterWidth = 40
-	minDB      = -60.0
-	maxDB      = 0.0
+	minDB = -60.0
+	maxDB = 0.0
 )
 
 var version = "dev"
-
-// Row positions (1-indexed) for the mutable lines
-const (
-	rowMute   = 10
-	rowGain   = 12
-	rowChan   = 14
-	rowInput  = 16
-	rowOutput = 17
-)
 
 type TUI struct {
 	eng       *engine.Engine
 	stopCh    chan struct{}
 	doneCh    chan struct{}
+	resizeCh  chan struct{}
 
 	inPeak, outPeak float64
 	peakDecay       float64
 	lastPeakTime    time.Time
 
+	termWidth  int
+	termHeight int
+
 	mu sync.Mutex
 }
 
 func New(eng *engine.Engine) *TUI {
+	w, h, _ := term.GetSize(int(1))
+	if w <= 0 {
+		w = 80
+	}
+	if h <= 0 {
+		h = 24
+	}
 	return &TUI{
 		eng:          eng,
 		stopCh:       make(chan struct{}),
 		doneCh:       make(chan struct{}),
+		resizeCh:     make(chan struct{}, 1),
 		peakDecay:    0.9995,
 		lastPeakTime: time.Now(),
+		termWidth:    w,
+		termHeight:   h,
 	}
 }
 
@@ -58,21 +64,48 @@ func (t *TUI) Done() <-chan struct{} {
 }
 
 func (t *TUI) Start() {
-	fmt.Print("\033[?25l") // hide cursor
+	os.Stdout.Write([]byte("\033[?25l\033[2J\033[H")) // hide cursor, clear screen, home
 	t.renderFull()
 	go t.refreshLoop()
 	go t.startInputLoop()
+	go t.resizeListener()
+}
+
+func (t *TUI) resizeListener() {
+	for {
+		select {
+		case <-t.stopCh:
+			return
+		case <-t.resizeCh:
+			w, h, err := term.GetSize(int(1))
+			if err != nil || w <= 0 || h <= 0 {
+				continue
+			}
+			t.mu.Lock()
+			t.termWidth = w
+			t.termHeight = h
+			t.mu.Unlock()
+			t.renderFull()
+		}
+	}
+}
+
+func (t *TUI) NotifyResize() {
+	select {
+	case t.resizeCh <- struct{}{}:
+	default:
+	}
 }
 
 func (t *TUI) refreshLoop() {
-	ticker := time.NewTicker(100 * time.Millisecond) // 10 fps
+	ticker := time.NewTicker(100 * time.Millisecond)
 	defer ticker.Stop()
 	for {
 		select {
 		case <-t.stopCh:
 			return
 		case <-ticker.C:
-			t.renderUpdate()
+			t.renderFull()
 		}
 	}
 }
@@ -83,7 +116,7 @@ func (t *TUI) Stop() {
 	default:
 		close(t.stopCh)
 	}
-	fmt.Print("\033[?25h\n") // show cursor
+	os.Stdout.Write([]byte("\033[?25h")) // show cursor
 	select {
 	case <-t.doneCh:
 	default:
@@ -174,66 +207,26 @@ func (t *TUI) handleInput(b []byte) bool {
 	return false
 }
 
-// renderFull draws the entire UI (used on start and after layout changes)
-func (t *TUI) renderFull() {
-	t.mu.Lock()
-	defer t.mu.Unlock()
-
-	stats := t.eng.Stats()
-	gainDB := t.eng.GetGain()
-	muted := t.eng.IsMuted()
-	inDB := t.computePeaks(stats)
-
-	var sb strings.Builder
-	sb.WriteString("\033[H\033[2J") // clear once
-
-	sb.WriteString("\033[1;36m")
-	sb.WriteString("  ╔══════════════════════════════════════════════════╗\n")
-	sb.WriteString("  ║              GOTONE  —  Audio Monitor            ║\n")
-	sb.WriteString("  ╚══════════════════════════════════════════════════╝\n")
-	sb.WriteString("\033[0m\n")
-	sb.WriteString(fmt.Sprintf("  \033[1mInput:  \033[0m%s\n", truncate(t.eng.InputDeviceName(), 42)))
-	sb.WriteString(fmt.Sprintf("  \033[1mOutput: \033[0m%s\n", truncate(t.eng.OutputDeviceName(), 42)))
-	bufMS := float64(t.eng.FramesPerBuffer()) / float64(t.eng.SampleRate()) * 1000
-	sb.WriteString(fmt.Sprintf("  \033[1mRate:   \033[0m%d Hz    \033[1mBuffer:\033[0m %d frames (%.1f ms)\n",
-		t.eng.SampleRate(), t.eng.FramesPerBuffer(), bufMS))
-	sb.WriteString(fmt.Sprintf("  \033[1mLatency:\033[0m in %.1f ms + out %.1f ms = \033[1m%.1f ms total\033[0m\n\n",
-		t.eng.InputLatencyMS(), t.eng.OutputLatencyMS(), t.eng.LatencyMS()))
-
-	// Mute line (row 10)
-	if muted {
-		sb.WriteString("  \033[1;31m■ MUTED\033[0m\n\n")
-	} else {
-		sb.WriteString("  \033[1;32m▶ LIVE\033[0m\n\n")
+func (t *TUI) meterWidth() int {
+	mw := t.termWidth - 22
+	if mw < 10 {
+		mw = 10
 	}
-	// Gain line (row 12)
-	gainStr := fmt.Sprintf("%+.1f dB", gainDB)
-	if gainDB <= -60 {
-		gainStr = "-∞ dB"
+	if mw > 80 {
+		mw = 80
 	}
-	sb.WriteString(fmt.Sprintf("  \033[1mGain:  \033[0m%s\n\n", gainStr))
-	// Output channel (row 14)
-	sb.WriteString(fmt.Sprintf("  \033[1mOutput Channel:  \033[0m%d / %d\n\n", t.eng.OutputChannel(), t.eng.OutputChannels()))
-	// Meters (rows 16-17)
-	sb.WriteString("  \033[1mInput:  \033[0m")
-	sb.WriteString(renderMeter(inDB, t.inPeak, "\033[32m"))
-	sb.WriteString(fmt.Sprintf(" %6.1f dB\n", inDB))
-	sb.WriteString("  \033[1mOutput: \033[0m")
-	sb.WriteString(renderMeter(t.computeOutDB(), t.outPeak, "\033[34m"))
-	sb.WriteString(fmt.Sprintf(" %6.1f dB\n\n", t.computeOutDB()))
-
-	sb.WriteString("\033[90m")
-	sb.WriteString("  ┌──────────────────────────────────────────────────────────────────┐\n")
-	sb.WriteString("  │  ↑/↓  Gain   ←/→  Channel   </>  Buffer   m  Mute   q  Quit   │\n")
-	sb.WriteString("  └──────────────────────────────────────────────────────────────────┘\n")
-	sb.WriteString(fmt.Sprintf("  gotone %s\n", version))
-	sb.WriteString("\033[0m")
-
-	fmt.Print(sb.String())
+	return mw
 }
 
-// renderUpdate redraws only the changing lines in-place
-func (t *TUI) renderUpdate() {
+func (t *TUI) boxWidth() int {
+	bw := t.termWidth - 4
+	if bw < 20 {
+		bw = 20
+	}
+	return bw
+}
+
+func (t *TUI) renderFull() {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
@@ -243,44 +236,94 @@ func (t *TUI) renderUpdate() {
 	inDB := t.computePeaks(stats)
 	outDB := t.computeOutDB()
 
+	bw := t.boxWidth()
+	mw := t.meterWidth()
+
 	var sb strings.Builder
 
-	// Row 10: mute status
-	sb.WriteString(fmt.Sprintf("\033[%d;1H", rowMute))
-	if muted {
-		sb.WriteString("  \033[1;31m■ MUTED\033[0m\033[K")
-	} else {
-		sb.WriteString("  \033[1;32m▶ LIVE\033[0m\033[K")
+	// Clear screen and home cursor
+	sb.WriteString("\033[H\033[2J")
+
+	line := func(row int, s string) {
+		sb.WriteString(fmt.Sprintf("\033[%d;1H%s\033[K", row, s))
 	}
 
-	// Row 12: gain
-	sb.WriteString(fmt.Sprintf("\033[%d;1H", rowGain))
+	row := 1
+
+	// Header box
+	sb.WriteString("\033[1;36m")
+	title := "GOTONE  —  Audio Monitor"
+	titlePadding := bw - 2 - len(title)
+	if titlePadding < 0 {
+		titlePadding = 0
+	}
+	leftPad := titlePadding / 2
+	rightPad := titlePadding - leftPad
+	line(row, "  ╔"+strings.Repeat("═", bw-2)+"╗"); row++
+	line(row, "  ║"+strings.Repeat(" ", leftPad)+title+strings.Repeat(" ", rightPad)+"║"); row++
+	line(row, "  ╚"+strings.Repeat("═", bw-2)+"╝"); row++
+	sb.WriteString("\033[0m")
+	line(row, ""); row++
+
+	// Device info
+	line(row, fmt.Sprintf("  \033[1mInput:  \033[0m%s", truncate(t.eng.InputDeviceName(), bw-12))); row++
+	line(row, fmt.Sprintf("  \033[1mOutput: \033[0m%s", truncate(t.eng.OutputDeviceName(), bw-12))); row++
+	bufMS := float64(t.eng.FramesPerBuffer()) / float64(t.eng.SampleRate()) * 1000
+	line(row, fmt.Sprintf("  \033[1mRate:   \033[0m%d Hz    \033[1mBuffer:\033[0m %d frames (%.1f ms)",
+		t.eng.SampleRate(), t.eng.FramesPerBuffer(), bufMS)); row++
+	line(row, fmt.Sprintf("  \033[1mLatency:\033[0m in %.1f ms + out %.1f ms = \033[1m%.1f ms total\033[0m",
+		t.eng.InputLatencyMS(), t.eng.OutputLatencyMS(), t.eng.LatencyMS())); row++
+	line(row, ""); row++
+
+	// Mute
+	if muted {
+		line(row, "  \033[1;31m■ MUTED\033[0m"); row++
+	} else {
+		line(row, "  \033[1;32m▶ LIVE\033[0m"); row++
+	}
+	line(row, ""); row++
+
+	// Gain
 	gainStr := fmt.Sprintf("%+.1f dB", gainDB)
 	if gainDB <= -60 {
 		gainStr = "-∞ dB"
 	}
-	sb.WriteString(fmt.Sprintf("  \033[1mGain:  \033[0m%s\033[K", gainStr))
+	line(row, fmt.Sprintf("  \033[1mGain:  \033[0m%s", gainStr)); row++
+	line(row, ""); row++
 
-	// Row 14: output channel
-	sb.WriteString(fmt.Sprintf("\033[%d;1H", rowChan))
-	sb.WriteString(fmt.Sprintf("  \033[1mChan:  \033[0m%d / %d\033[K", t.eng.OutputChannel(), t.eng.OutputChannels()))
+	// Channel
+	line(row, fmt.Sprintf("  \033[1mOutput Channel:  \033[0m%d / %d", t.eng.OutputChannel(), t.eng.OutputChannels())); row++
+	line(row, ""); row++
 
-	// Row 16: input meter
-	sb.WriteString(fmt.Sprintf("\033[%d;1H", rowInput))
-	sb.WriteString("  \033[1mInput:  \033[0m")
-	sb.WriteString(renderMeter(inDB, t.inPeak, "\033[32m"))
-	sb.WriteString(fmt.Sprintf(" %6.1f dB\033[K", inDB))
+	// Meters
+	line(row, "  \033[1mInput:  \033[0m"+renderMeter(inDB, t.inPeak, "\033[32m", mw)+fmt.Sprintf(" %6.1f dB", inDB)); row++
+	line(row, "  \033[1mOutput: \033[0m"+renderMeter(outDB, t.outPeak, "\033[34m", mw)+fmt.Sprintf(" %6.1f dB", outDB)); row++
+	line(row, ""); row++
 
-	// Row 17: output meter
-	sb.WriteString(fmt.Sprintf("\033[%d;1H", rowOutput))
-	sb.WriteString("  \033[1mOutput: \033[0m")
-	sb.WriteString(renderMeter(outDB, t.outPeak, "\033[34m"))
-	sb.WriteString(fmt.Sprintf(" %6.1f dB\033[K", outDB))
+	// Help bar
+	helpText := "  ↑/↓  Gain   ←/→  Channel   </>  Buffer   m  Mute   q  Quit"
+	helpBoxWidth := bw
+	if helpBoxWidth < len(helpText)+4 {
+		helpBoxWidth = len(helpText) + 4
+	}
+	helpInner := helpBoxWidth - 2
+	helpContent := truncate(helpText, helpInner)
+	if len(helpContent) < helpInner {
+		helpContent += strings.Repeat(" ", helpInner-len(helpContent))
+	}
+	sb.WriteString("\033[90m")
+	line(row, "  ┌"+strings.Repeat("─", helpInner)+"┐"); row++
+	line(row, "  │"+helpContent+"│"); row++
+	line(row, "  └"+strings.Repeat("─", helpInner)+"┘"); row++
+	line(row, fmt.Sprintf("  gotone %s", version)); row++
+	sb.WriteString("\033[0m")
 
-	// Move cursor out of the way
-	sb.WriteString("\033[20;1H")
+	// Blank remaining rows
+	for ; row <= t.termHeight; row++ {
+		sb.WriteString(fmt.Sprintf("\033[%d;1H\033[K", row))
+	}
 
-	fmt.Print(sb.String())
+	os.Stdout.Write([]byte(sb.String()))
 }
 
 func (t *TUI) computePeaks(stats engine.Stats) float64 {
@@ -308,7 +351,7 @@ func (t *TUI) computeOutDB() float64 {
 	return engine.RMSdB(t.outPeak)
 }
 
-func renderMeter(level, peakVal float64, color string) string {
+func renderMeter(level, peakVal float64, color string, meterWidth int) string {
 	normalized := (level - minDB) / (maxDB - minDB)
 	if normalized < 0 {
 		normalized = 0
@@ -332,7 +375,7 @@ func renderMeter(level, peakVal float64, color string) string {
 	sb.WriteString("[")
 	for i := 0; i < meterWidth; i++ {
 		if i == peakPos && peakPos > 0 {
-			sb.WriteString("\033[97m│\033[0m")
+			sb.WriteString("\033[97m|\033[0m")
 		} else if i < filled {
 			ratio := float64(i) / float64(meterWidth)
 			if ratio < 0.6 {
@@ -342,9 +385,9 @@ func renderMeter(level, peakVal float64, color string) string {
 			} else {
 				sb.WriteString("\033[31m")
 			}
-			sb.WriteString("█\033[0m")
+			sb.WriteString("#\033[0m")
 		} else {
-			sb.WriteString("\033[90m░\033[0m")
+			sb.WriteString("\033[90m.\033[0m")
 		}
 	}
 	sb.WriteString("]")
@@ -354,6 +397,9 @@ func renderMeter(level, peakVal float64, color string) string {
 func truncate(s string, max int) string {
 	if len(s) <= max {
 		return s
+	}
+	if max < 3 {
+		return s[:max]
 	}
 	return s[:max-3] + "..."
 }
