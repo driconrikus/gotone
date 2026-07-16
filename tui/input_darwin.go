@@ -1,4 +1,4 @@
-//go:build darwin || linux
+//go:build darwin
 
 package tui
 
@@ -12,7 +12,6 @@ var originalTermios syscall.Termios
 
 func init() {
 	fd := int(os.Stdin.Fd())
-	// Save original termios
 	syscall.Syscall6(
 		syscall.SYS_IOCTL,
 		uintptr(fd),
