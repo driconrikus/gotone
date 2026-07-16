@@ -14,6 +14,8 @@ import (
 	"github.com/rvaldez/gotone/tui"
 )
 
+var version = "dev"
+
 func main() {
 	listDevices := flag.Bool("list-devices", false, "List available audio devices and exit")
 	inputIdx := flag.Int("input", -1, "Input device index")
@@ -82,6 +84,8 @@ func main() {
 	}
 
 	eng.SetGain(*gainDB)
+
+	tui.SetVersion(version)
 
 	if err := eng.Start(); err != nil {
 		fmt.Fprintf(os.Stderr, "Error starting audio: %v\n", err)

@@ -30,7 +30,7 @@ jobs:
           binary="gotone-darwin-${{ matrix.arch }}"
           CC=$(if [ "${{ matrix.arch }}" = "arm64" ]; then echo "cc"; else echo "cc -arch x86_64"; fi)
           CGO_ENABLED=1 GOOS=darwin GOARCH=${{ matrix.arch }} CC="$CC" \
-            go build -ldflags="-s -w" -o "dist/${binary}" .
+            go build -ldflags="-s -w -X main.version=${{ github.ref_name }}" -o "dist/${binary}" .
         env:
           PKG_CONFIG_PATH: /opt/homebrew/lib/pkgconfig
 
@@ -63,7 +63,7 @@ jobs:
             export CC=aarch64-linux-gnu-gcc
           fi
           CGO_ENABLED=1 GOOS=linux GOARCH=${{ matrix.arch }} \
-            go build -ldflags="-s -w" -o "dist/${binary}" .
+            go build -ldflags="-s -w -X main.version=${{ github.ref_name }}" -o "dist/${binary}" .
 
       - uses: actions/upload-artifact@v4
         with:
@@ -90,7 +90,7 @@ jobs:
           CGO_ENABLED=1 GOOS=windows GOARCH=amd64 \
             CGO_CFLAGS="-I${VCPKG_ROOT}/installed/x64-windows/include" \
             CGO_LDFLAGS="-L${VCPKG_ROOT}/installed/x64-windows/lib" \
-            go build -ldflags="-s -w" -o "dist/gotone-windows-amd64.exe" .
+            go build -ldflags="-s -w -X main.version=${{ github.ref_name }}" -o "dist/gotone-windows-amd64.exe" .
         shell: bash
 
       - uses: actions/upload-artifact@v4

@@ -16,6 +16,8 @@ const (
 	maxDB      = 0.0
 )
 
+var version = "dev"
+
 // Row positions (1-indexed) for the mutable lines
 const (
 	rowMute   = 10
@@ -45,6 +47,10 @@ func New(eng *engine.Engine) *TUI {
 		peakDecay:    0.9995,
 		lastPeakTime: time.Now(),
 	}
+}
+
+func SetVersion(v string) {
+	version = v
 }
 
 func (t *TUI) Done() <-chan struct{} {
@@ -183,7 +189,7 @@ func (t *TUI) renderFull() {
 
 	sb.WriteString("\033[1;36m")
 	sb.WriteString("  ╔══════════════════════════════════════════════════╗\n")
-	sb.WriteString("  ║              GOTONE  —  Audio Monitor         ║\n")
+	sb.WriteString("  ║              GOTONE  —  Audio Monitor            ║\n")
 	sb.WriteString("  ╚══════════════════════════════════════════════════╝\n")
 	sb.WriteString("\033[0m\n")
 	sb.WriteString(fmt.Sprintf("  \033[1mInput:  \033[0m%s\n", truncate(t.eng.InputDeviceName(), 42)))
@@ -207,7 +213,7 @@ func (t *TUI) renderFull() {
 	}
 	sb.WriteString(fmt.Sprintf("  \033[1mGain:  \033[0m%s\n\n", gainStr))
 	// Output channel (row 14)
-	sb.WriteString(fmt.Sprintf("  \033[1mChan:  \033[0m%d / %d\n\n", t.eng.OutputChannel(), t.eng.OutputChannels()))
+	sb.WriteString(fmt.Sprintf("  \033[1mOutput Channel:  \033[0m%d / %d\n\n", t.eng.OutputChannel(), t.eng.OutputChannels()))
 	// Meters (rows 16-17)
 	sb.WriteString("  \033[1mInput:  \033[0m")
 	sb.WriteString(renderMeter(inDB, t.inPeak, "\033[32m"))
@@ -220,6 +226,7 @@ func (t *TUI) renderFull() {
 	sb.WriteString("  ┌──────────────────────────────────────────────────────────────────┐\n")
 	sb.WriteString("  │  ↑/↓  Gain   ←/→  Channel   </>  Buffer   m  Mute   q  Quit   │\n")
 	sb.WriteString("  └──────────────────────────────────────────────────────────────────┘\n")
+	sb.WriteString(fmt.Sprintf("  gotone %s\n", version))
 	sb.WriteString("\033[0m")
 
 	fmt.Print(sb.String())
