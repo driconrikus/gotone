@@ -107,14 +107,10 @@ jobs:
             rm -rf "$dir"
           done
 
-          # portaudio .pc doesn't require jack, but static lib has JACK symbols.
-          # Patch it so pkg-config pulls in -ljack for static linking.
+          # portaudio .so links against JACK but .pc doesn't declare it.
+          # Patch Libs: directly so pkg-config emits -ljack.
           pc="$SYSROOT/usr/lib/aarch64-linux-gnu/pkgconfig/portaudio-2.0.pc"
-          if grep -q '^Requires:' "$pc" 2>/dev/null; then
-            sudo sed -i 's/^Requires: \(.*\)/Requires: \1 jack/' "$pc"
-          else
-            echo 'Requires: jack' | sudo tee -a "$pc"
-          fi
+          sudo sed -i 's/^Libs: \(.*\)/Libs: \1 -ljack/' "$pc"
 
           # Verify ARM64 libs exist
           echo "=== ALSA ==="
@@ -134,6 +130,7 @@ jobs:
             export CC=aarch64-linux-gnu-gcc
             export PKG_CONFIG_SYSROOT_DIR=/usr/aarch64-linux-gnu
             export PKG_CONFIG_LIBDIR=/usr/aarch64-linux-gnu/usr/lib/aarch64-linux-gnu/pkgconfig
+            export CGO_LDFLAGS="-Wl,-rpath-link,/usr/aarch64-linux-gnu/usr/lib/aarch64-linux-gnu"
           fi
           CGO_ENABLED=1 GOOS=linux GOARCH=${{ matrix.arch }} \
             go build -ldflags="-s -w -X main.version=${{ github.ref_name }}" -o "dist/${binary}" .
