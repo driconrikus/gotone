@@ -159,24 +159,33 @@ jobs:
         shell: bash
 
       - name: Build
-        env:
-          CGO_ENABLED: "1"
-          GOOS: windows
-          GOARCH: amd64
-          CGO_CFLAGS: "-IC:/vcpkg/installed/x64-windows/include"
-          CGO_LDFLAGS: "-LC:/vcpkg/installed/x64-windows/lib"
         run: |
-          # Create pkg-config wrapper and prepend to PATH
+          # Verify vcpkg installed correctly
+          ls -la C:/vcpkg/installed/x64-windows/include/portaudio.h
+          ls -la C:/vcpkg/installed/x64-windows/lib/portaudio.lib
+
+          # Create pkg-config wrapper script (bash, not .bat — shell is bash)
           mkdir -p "$HOME/.local/bin"
-          cat > "$HOME/.local/bin/pkg-config.bat" << 'EOF'
-          @echo off
-          if /i "%1"=="--cflags" ( echo -IC:/vcpkg/installed/x64-windows/include & exit /b 0 )
-          if /i "%1"=="--libs" ( echo -LC:/vcpkg/installed/x64-windows/lib -lportaudio & exit /b 0 )
-          exit /b 0
-          EOF
+          cat > "$HOME/.local/bin/pkg-config" << 'WRAPPER'
+#!/bin/bash
+case "$1" in
+  --cflags) echo -IC:/vcpkg/installed/x64-windows/include ;;
+  --libs)   echo -LC:/vcpkg/installed/x64-windows/lib -lportaudio ;;
+  *)        exit 0 ;;
+esac
+WRAPPER
+          chmod +x "$HOME/.local/bin/pkg-config"
           export PATH="$HOME/.local/bin:$PATH"
+
+          # Verify our wrapper works
+          pkg-config --cflags portaudio-2.0
+          pkg-config --libs portaudio-2.0
+
           mkdir -p dist
-          go build -ldflags="-s -w -X main.version=${{ github.ref_name }}" -o dist/gotone-windows-amd64.exe .
+          CGO_ENABLED=1 GOOS=windows GOARCH=amd64 \
+            CGO_CFLAGS="-IC:/vcpkg/installed/x64-windows/include" \
+            CGO_LDFLAGS="-LC:/vcpkg/installed/x64-windows/lib" \
+            go build -ldflags="-s -w -X main.version=${{ github.ref_name }}" -o dist/gotone-windows-amd64.exe .
         shell: bash
 
       - uses: actions/upload-artifact@v4
