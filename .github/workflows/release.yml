@@ -118,12 +118,15 @@ jobs:
         shell: bash
 
       - name: Build
+        env:
+          CGO_ENABLED: "1"
+          GOOS: windows
+          GOARCH: amd64
+          CGO_CFLAGS: "-IC:/vcpkg/installed/x64-windows/include"
+          CGO_LDFLAGS: "-LC:/vcpkg/installed/x64-windows/lib"
         run: |
           mkdir -p dist
-          CGO_ENABLED=1 GOOS=windows GOARCH=amd64 \
-            CGO_CFLAGS="-I${VCPKG_ROOT}/installed/x64-windows/include" \
-            CGO_LDFLAGS="-L${VCPKG_ROOT}/installed/x64-windows/lib" \
-            go build -ldflags="-s -w -X main.version=${{ github.ref_name }}" -o "dist/gotone-windows-amd64.exe" .
+          go build -ldflags="-s -w -X main.version=${{ github.ref_name }}" -o dist/gotone-windows-amd64.exe .
         shell: bash
 
       - uses: actions/upload-artifact@v4
