@@ -1,6 +1,9 @@
 package engine
 
-import "math"
+import (
+	"fmt"
+	"math"
+)
 
 const eqBands = 10
 
@@ -25,11 +28,29 @@ func (b *Biquad) Reset() {
 	b.x1, b.x2, b.y1, b.y2 = 0, 0, 0, 0
 }
 
+type Preset struct {
+	Name  string
+	Gains [eqBands]float64
+}
+
+var BuiltinPresets = []Preset{
+	{"Flat", [eqBands]float64{0, 0, 0, 0, 0, 0, 0, 0, 0, 0}},
+	{"Rock", [eqBands]float64{4, 3, 2, 1, 0, -1, 0, 1, 2, 3}},
+	{"Pop", [eqBands]float64{-1, 0, 2, 3, 2, 0, -1, -1, 0, 1}},
+	{"Jazz", [eqBands]float64{3, 2, 1, 2, 1, 0, 1, 2, 3, 2}},
+	{"Classical", [eqBands]float64{4, 3, 2, 1, 0, 0, 1, 2, 3, 4}},
+	{"Bass Boost", [eqBands]float64{6, 5, 4, 2, 1, 0, 0, 0, 0, 0}},
+	{"Treble Boost", [eqBands]float64{0, 0, 0, 0, 0, 0, 1, 2, 4, 6}},
+	{"Vocal", [eqBands]float64{-1, -1, 0, 1, 3, 4, 3, 1, 0, -1}},
+	{"Acoustic", [eqBands]float64{2, 2, 1, 1, 0, 0, 1, 2, 3, 3}},
+}
+
 type EQ struct {
-	bands  [eqBands]Biquad
-	gains  [eqBands]float64
-	Q      float64
-	sr     float64
+	bands       [eqBands]Biquad
+	gains       [eqBands]float64
+	Q           float64
+	sr          float64
+	customSlots [3][eqBands]float64
 }
 
 func NewEQ(sampleRate float64) *EQ {
@@ -102,4 +123,66 @@ func (eq *EQ) ProcessSample(x float64) float64 {
 		x = eq.bands[i].Process(x)
 	}
 	return x
+}
+
+func (eq *EQ) ApplyGains(gains [eqBands]float64) {
+	for i, g := range gains {
+		eq.SetBand(i, g)
+	}
+}
+
+func (eq *EQ) ApplyPreset(p Preset) {
+	eq.ApplyGains(p.Gains)
+}
+
+func (eq *EQ) SaveCustom(slot int) {
+	if slot < 0 || slot >= 3 {
+		return
+	}
+	copy(eq.customSlots[slot][:], eq.gains[:])
+}
+
+func (eq *EQ) LoadCustom(slot int) {
+	if slot < 0 || slot >= 3 {
+		return
+	}
+	eq.ApplyGains(eq.customSlots[slot])
+}
+
+func (eq *EQ) CustomSlotName(slot int) string {
+	if slot < 0 || slot >= 3 {
+		return ""
+	}
+	return fmt.Sprintf("Custom %d", slot+1)
+}
+
+func (eq *EQ) CustomSlotGains(slot int) [eqBands]float64 {
+	if slot < 0 || slot >= 3 {
+		return [eqBands]float64{}
+	}
+	return eq.customSlots[slot]
+}
+
+func (eq *EQ) FindEmptyCustomSlot() int {
+	for i := 0; i < 3; i++ {
+		allZero := true
+		for _, g := range eq.customSlots[i] {
+			if g != 0 {
+				allZero = false
+				break
+			}
+		}
+		if allZero {
+			return i
+		}
+	}
+	return -1
+}
+
+func (eq *EQ) CustomSlots() [3][eqBands]float64 {
+	return eq.customSlots
+}
+
+func (eq *EQ) SetCustomSlots(slots [3][eqBands]float64) {
+	eq.customSlots = slots
 }

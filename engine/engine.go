@@ -1,8 +1,11 @@
 package engine
 
 import (
+	"encoding/json"
 	"fmt"
 	"math"
+	"os"
+	"path/filepath"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -38,6 +41,10 @@ type Engine struct {
 	outputChannels int // total output channels available
 
 	eq *EQ
+
+	currentPresetIdx int
+
+	customPresetsPath string
 
 	stats   Stats
 	statsMu sync.RWMutex
@@ -123,6 +130,7 @@ func New(inputIdx, outputIdx, sampleRate, framesPerBuffer, outputChannel int) (*
 		outputChannels: outDev.MaxOutputChannels,
 		gain:           1.0,
 		eq:             NewEQ(float64(sampleRate)),
+		currentPresetIdx: 0,
 	}
 
 	outChans := outDev.MaxOutputChannels
@@ -151,6 +159,12 @@ func New(inputIdx, outputIdx, sampleRate, framesPerBuffer, outputChannel int) (*
 		return nil, fmt.Errorf("open stream: %w", err)
 	}
 	e.stream = stream
+
+	cfgDir, err := os.UserConfigDir()
+	if err == nil {
+		e.customPresetsPath = filepath.Join(cfgDir, "gotone", "custom_presets.json")
+		e.loadCustomPresets()
+	}
 
 	return e, nil
 }
@@ -402,4 +416,100 @@ func (e *Engine) EQBandGain(band int) int {
 
 func (e *Engine) ResetEQ() {
 	e.eq.Reset()
+	e.currentPresetIdx = 0
+}
+
+func (e *Engine) PresetNames() []string {
+	var names []string
+	for _, p := range BuiltinPresets {
+		names = append(names, p.Name)
+	}
+	for i := 0; i < 3; i++ {
+		names = append(names, e.eq.CustomSlotName(i))
+	}
+	return names
+}
+
+func (e *Engine) ApplyPreset(index int) {
+	if index < 0 || index >= e.PresetCount() {
+		return
+	}
+	e.currentPresetIdx = index
+	if index < len(BuiltinPresets) {
+		e.eq.ApplyPreset(BuiltinPresets[index])
+		return
+	}
+	custom := index - len(BuiltinPresets)
+	e.eq.LoadCustom(custom)
+}
+
+func (e *Engine) CurrentPresetName() string {
+	names := e.PresetNames()
+	if e.currentPresetIdx >= 0 && e.currentPresetIdx < len(names) {
+		return names[e.currentPresetIdx]
+	}
+	return "Custom"
+}
+
+func (e *Engine) LoadCustom(slot int) {
+	e.eq.LoadCustom(slot)
+	e.currentPresetIdx = len(BuiltinPresets) + slot
+}
+
+func (e *Engine) SaveCustom(slot int) {
+	e.eq.SaveCustom(slot)
+	e.saveCustomPresets()
+}
+
+func (e *Engine) QuickSave() (string, bool) {
+	bpn := len(BuiltinPresets)
+	if e.currentPresetIdx >= bpn && e.currentPresetIdx < e.PresetCount() {
+		slot := e.currentPresetIdx - bpn
+		e.eq.SaveCustom(slot)
+		e.saveCustomPresets()
+		return e.CustomSlotName(slot), true
+	}
+	return "", false
+}
+
+func (e *Engine) CustomSlotName(slot int) string {
+	return e.eq.CustomSlotName(slot)
+}
+
+func (e *Engine) PresetCount() int {
+	return len(BuiltinPresets) + 3
+}
+
+type customPresetsData struct {
+	Slots [3][eqBands]float64 `json:"slots"`
+}
+
+func (e *Engine) loadCustomPresets() {
+	if e.customPresetsPath == "" {
+		return
+	}
+	data, err := os.ReadFile(e.customPresetsPath)
+	if err != nil {
+		return
+	}
+	var cp customPresetsData
+	if err := json.Unmarshal(data, &cp); err != nil {
+		return
+	}
+	e.eq.SetCustomSlots(cp.Slots)
+}
+
+func (e *Engine) saveCustomPresets() {
+	if e.customPresetsPath == "" {
+		return
+	}
+	if err := os.MkdirAll(filepath.Dir(e.customPresetsPath), 0755); err != nil {
+		return
+	}
+	cp := customPresetsData{Slots: e.eq.CustomSlots()}
+	data, err := json.Marshal(cp)
+	if err != nil {
+		return
+	}
+	os.WriteFile(e.customPresetsPath, data, 0644)
 }
