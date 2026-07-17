@@ -134,6 +134,13 @@ If you find GoTone useful, consider buying me a coffee:
 
 [![PayPal](https://img.shields.io/badge/Donate-PayPal-blue.svg)](https://www.paypal.com/paypalme/driconrikus)
 
+## To-do
+
+- [ ] 10-band EQ (WIP)
+- [ ] VST / AU plugin hosting (future)
+
+Suggestions welcome — open an issue or PR!
+
 ## License
 
 MIT
