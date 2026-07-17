@@ -351,7 +351,7 @@ func (t *TUI) renderFull() {
 	line(row, ""); row++
 
 	// Help bar
-		helpText := "  ↑/↓  Gain   ←/→  Channel   </>  Buffer   m  Mute   e  EQ   h  Help   q  Quit"
+		helpText := "  ↑/↓  Gain   ←/→  Channel   </>  Buffer   m  Mute   e  Equalizer   h  Help   q  Quit"
 	helpTextLen := displayLen(helpText)
 	helpBoxWidth := bw
 	if helpBoxWidth < helpTextLen+4 {
