@@ -132,10 +132,6 @@ jobs:
           vcpkg install portaudio:x64-windows
         shell: bash
 
-      - name: Add pkg-config to PATH
-        run: echo "C:/Strawberry/perl/bin" >> $GITHUB_PATH
-        shell: bash
-
       - name: Build
         env:
           CGO_ENABLED: "1"
@@ -144,6 +140,15 @@ jobs:
           CGO_CFLAGS: "-IC:/vcpkg/installed/x64-windows/include"
           CGO_LDFLAGS: "-LC:/vcpkg/installed/x64-windows/lib"
         run: |
+          # Create pkg-config wrapper and prepend to PATH
+          mkdir -p "$HOME/.local/bin"
+          cat > "$HOME/.local/bin/pkg-config.bat" << 'EOF'
+          @echo off
+          if /i "%1"=="--cflags" ( echo -IC:/vcpkg/installed/x64-windows/include & exit /b 0 )
+          if /i "%1"=="--libs" ( echo -LC:/vcpkg/installed/x64-windows/lib -lportaudio & exit /b 0 )
+          exit /b 0
+          EOF
+          export PATH="$HOME/.local/bin:$PATH"
           mkdir -p dist
           go build -ldflags="-s -w -X main.version=${{ github.ref_name }}" -o dist/gotone-windows-amd64.exe .
         shell: bash
