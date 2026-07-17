@@ -57,6 +57,18 @@ jobs:
       - name: Install portaudio
         run: sudo apt-get update && sudo apt-get install -y portaudio19-dev
 
+      - name: Install arm64 cross dependencies
+        if: matrix.arch == 'arm64'
+        run: |
+          sudo dpkg --add-architecture arm64
+          sudo apt-get update
+          sudo apt-get install -y libasound2-dev:arm64
+          git clone --depth 1 https://github.com/PortAudio/portaudio.git /tmp/portaudio
+          cd /tmp/portaudio
+          sudo ./configure --host=aarch64-linux-gnu --prefix=/usr/aarch64-linux-gnu
+          sudo make -j$(nproc)
+          sudo make install
+
       - name: Build
         run: |
           mkdir -p dist
@@ -64,6 +76,7 @@ jobs:
           if [ "${{ matrix.arch }}" = "arm64" ]; then
             sudo apt-get install -y gcc-aarch64-linux-gnu
             export CC=aarch64-linux-gnu-gcc
+            export PKG_CONFIG_PATH=/usr/aarch64-linux-gnu/lib/pkgconfig
           fi
           CGO_ENABLED=1 GOOS=linux GOARCH=${{ matrix.arch }} \
             go build -ldflags="-s -w -X main.version=${{ github.ref_name }}" -o "dist/${binary}" .
