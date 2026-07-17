@@ -130,7 +130,7 @@ Both trigger a GitHub Actions build that produces binaries for macOS (arm64, amd
 
 ## To-do
 
-- [x] 10-band EQ
+- [ ] 10-band EQ (WIP)
 - [ ] VST / AU plugin hosting (future)
 
 ## License
