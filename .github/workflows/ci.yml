@@ -43,11 +43,11 @@ jobs:
           BINDIR="$WINHOME/.local/bin"
           mkdir -p "$BINDIR"
           cat > "$BINDIR/pkg-config.bat" << 'BAT'
-@echo off
-if /i "%~1"=="--cflags" (echo -I%VCPKG_ROOT%/installed/x64-windows/include & exit /b 0)
-if /i "%~1"=="--libs" (echo -L%VCPKG_ROOT%/installed/x64-windows/lib -lportaudio & exit /b 0)
-exit /b 0
-BAT
+          @echo off
+          if /i "%~1"=="--cflags" (echo -I%VCPKG_ROOT%/installed/x64-windows/include & exit /b 0)
+          if /i "%~1"=="--libs" (echo -L%VCPKG_ROOT%/installed/x64-windows/lib -lportaudio & exit /b 0)
+          exit /b 0
+          BAT
           export PATH="$BINDIR:$PATH"
           CGO_ENABLED=1 GOOS=windows GOARCH=amd64 \
             PKG_CONFIG="$BINDIR/pkg-config.bat" \
