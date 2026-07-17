@@ -122,9 +122,9 @@ jobs:
           echo "=== ALSA ==="
           ls -la "$SYSROOT/usr/lib/aarch64-linux-gnu"/libasound.* "$SYSROOT/usr/include/alsa/asoundlib.h" 2>&1
           echo "=== PortAudio ==="
-          ls -la "$SYSROOT/usr/lib/aarch64-linux-gnu"/libportaudio.* "$SYSROOT/usr/include/portaudio.h" 2>&1
+          ls -la "$SYSROOT/usr/lib"/libportaudio.* "$SYSROOT/usr/include/portaudio.h" 2>&1
           echo "=== pkgconfig ==="
-          ls "$SYSROOT/usr/lib/aarch64-linux-gnu/pkgconfig/"*.pc 2>&1
+          ls "$SYSROOT/usr/lib/pkgconfig/"*.pc 2>&1
 
       - name: Build
         run: |
@@ -133,7 +133,8 @@ jobs:
           if [ "${{ matrix.arch }}" = "arm64" ]; then
             export CC=aarch64-linux-gnu-gcc
             export PKG_CONFIG_SYSROOT_DIR=/usr/aarch64-linux-gnu
-            export PKG_CONFIG_LIBDIR=/usr/aarch64-linux-gnu/usr/lib/aarch64-linux-gnu/pkgconfig
+            export PKG_CONFIG_LIBDIR=/usr/aarch64-linux-gnu/usr/lib/pkgconfig:/usr/aarch64-linux-gnu/usr/lib/aarch64-linux-gnu/pkgconfig
+            export CGO_LDFLAGS="-L/usr/aarch64-linux-gnu/usr/lib/aarch64-linux-gnu"
           fi
           CGO_ENABLED=1 GOOS=linux GOARCH=${{ matrix.arch }} \
             go build -ldflags="-s -w -X main.version=${{ github.ref_name }}" -o "dist/${binary}" .
