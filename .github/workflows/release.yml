@@ -64,7 +64,7 @@ jobs:
           sudo mkdir -p "$SYSROOT"
           cd /tmp
           # Download and parse arm64 ALSA version from archive.ubuntu.com
-          UBUNTU_PORTS="http://ports.ubuntu.com/ubuntu-ports"
+          UBUNTU_PORTS="https://us.ports.ubuntu.com/ubuntu-ports"
           ALSA_VER="1.2.15.3-1ubuntu1.1"
           echo "ALSA arm64 version: '$ALSA_VER'"
           for pkg in libasound2 libasound2-dev; do
