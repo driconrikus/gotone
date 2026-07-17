@@ -5,10 +5,8 @@ import (
 	"flag"
 	"fmt"
 	"os"
-	"os/signal"
 	"strconv"
 	"strings"
-	"syscall"
 
 	"github.com/rvaldez/gotone/engine"
 	"github.com/rvaldez/gotone/tui"
@@ -97,20 +95,11 @@ func main() {
 	ui.Start()
 
 	// Handle signals
-	sigCh := make(chan os.Signal, 1)
-	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM, syscall.SIGWINCH)
-	go func() {
-		for sig := range sigCh {
-			switch sig {
-			case syscall.SIGWINCH:
-				ui.NotifyResize()
-			default:
-				ui.Stop()
-				eng.Stop()
-				os.Exit(0)
-			}
-		}
-	}()
+	watchSignals(ui, func() {
+		ui.Stop()
+		eng.Stop()
+		os.Exit(0)
+	})
 
 	// Block until TUI signals quit
 	<-ui.Done()
