@@ -65,7 +65,7 @@ func (t *TUI) Done() <-chan struct{} {
 }
 
 func (t *TUI) Start() {
-	os.Stdout.Write([]byte("\033[?25l\033[2J\033[H")) // hide cursor, clear screen, home
+	os.Stdout.Write([]byte("\033[?1049h\033[?25l")) // enter alternate screen, hide cursor
 	t.renderFull()
 	go t.refreshLoop()
 	go t.startInputLoop()
@@ -117,7 +117,7 @@ func (t *TUI) Stop() {
 	default:
 		close(t.stopCh)
 	}
-	os.Stdout.Write([]byte("\033[?25h")) // show cursor
+	os.Stdout.Write([]byte("\033[?25h\033[?1049l")) // show cursor, leave alternate screen
 	select {
 	case <-t.doneCh:
 	default:
@@ -245,8 +245,8 @@ func (t *TUI) renderFull() {
 
 	var sb strings.Builder
 
-	// Clear screen and home cursor
-	sb.WriteString("\033[H\033[2J")
+	// Home cursor
+	sb.WriteString("\033[H")
 
 	if t.showHelp {
 		t.renderHelp(&sb)
