@@ -82,8 +82,8 @@ jobs:
           # Add arm64 architecture and Ubuntu ports repo.
           # Pin existing sources to amd64 so they don't try fetching arm64 (404).
           codename=$(grep UBUNTU_CODENAME /etc/os-release | cut -d= -f2)
-          sudo find /etc/apt -name '*.list' -exec sed -i 's/^deb /deb [arch=amd64] /' {} \;
-          sudo find /etc/apt -name '*.sources' -exec sed -i '/^Components:/a Architectures: amd64' {} \; 2>/dev/null || true
+          sudo sed -i '/^deb /{/\[arch=/!s/^deb /deb [arch=amd64] /}' /etc/apt/sources.list
+          sudo find /etc/apt/sources.list.d -name '*.list' -exec sed -i '/^deb /{/\[arch=/!s/^deb /deb [arch=amd64] /}' {} \;
           sudo dpkg --add-architecture arm64
           echo "deb [arch=arm64] http://ports.ubuntu.com/ubuntu-ports $codename main universe multiverse restricted" | sudo tee /etc/apt/sources.list.d/arm64.list > /dev/null
           echo "deb [arch=arm64] http://ports.ubuntu.com/ubuntu-ports $codename-updates main universe multiverse restricted" | sudo tee -a /etc/apt/sources.list.d/arm64.list > /dev/null
