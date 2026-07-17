@@ -18,7 +18,7 @@ You want a quick test of your instrument but find dowloading and setting up a fu
 
 ## Install
 
-Requires [PortAudio](http://www.portaudio.com/) and Go 1.21+.
+Requires [PortAudio](http://www.portaudio.com/) and Go 1.26.5+.
 
 ```bash
 # macOS
@@ -65,6 +65,7 @@ Walks you through selecting input device, output device, and output channel.
 | ← / → | Output channel -1 / +1 |
 | , / . | Buffer size ×2 / ÷2 |
 | m | Mute / unmute |
+| h | Show/hide help |
 | q | Quit |
 
 ## Example
@@ -85,13 +86,14 @@ Walks you through selecting input device, output device, and output channel.
 
 ```
 gotone/
-├── main.go           # CLI, device selection, signal handling
+├── main.go             # CLI, device selection, signal handling
+├── signals_unix.go     # Unix signal handling
+├── signals_windows.go  # Windows signal handling
 ├── engine/
-│   └── engine.go     # PortAudio duplex stream, gain, mute, routing
+│   └── engine.go       # PortAudio duplex stream, gain, mute, routing
 ├── tui/
-│   ├── tui.go        # Terminal UI, meters, keyboard input
-│   ├── input_unix.go # Raw terminal input (macOS/Linux)
-│   └── input_windows.go
+│   ├── tui.go          # Terminal UI, meters, help overlay, keyboard input
+│   └── input_windows.go # Windows console input
 ├── go.mod
 └── go.sum
 ```
