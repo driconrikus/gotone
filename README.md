@@ -128,6 +128,12 @@ git push origin v0.1.0
 
 Both trigger a GitHub Actions build that produces binaries for macOS (arm64, amd64), Linux (amd64, arm64), and Windows (amd64). Beta tags are marked as pre-releases.
 
+## Support
+
+If you find GoTone useful, consider buying me a coffee:
+
+[![PayPal](https://img.shields.io/badge/Donate-PayPal-blue.svg)](https://www.paypal.com/paypalme/driconrikus)
+
 ## License
 
 MIT
