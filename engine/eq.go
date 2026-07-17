@@ -43,6 +43,7 @@ var BuiltinPresets = []Preset{
 	{"Treble Boost", [eqBands]float64{0, 0, 0, 0, 0, 0, 1, 2, 4, 6}},
 	{"Vocal", [eqBands]float64{-1, -1, 0, 1, 3, 4, 3, 1, 0, -1}},
 	{"Acoustic", [eqBands]float64{2, 2, 1, 1, 0, 0, 1, 2, 3, 3}},
+	{"Metal", [eqBands]float64{5, 4, 0, -3, -4, -2, 1, 3, 4, 5}},
 }
 
 type EQ struct {

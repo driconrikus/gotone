@@ -181,6 +181,16 @@ func (t *TUI) handleInput(b []byte) bool {
 				t.showPresets = false
 				return true
 			}
+		case '\x1b':
+			switch {
+			case t.showPresets:
+				t.showPresets = false
+			case t.showEQ:
+				t.showEQ = false
+			case t.showHelp:
+				t.showHelp = false
+			}
+			return true
 		case 'S':
 			if t.showPresets {
 				bpn := len(engine.BuiltinPresets)
@@ -196,6 +206,9 @@ func (t *TUI) handleInput(b []byte) bool {
 				return true
 			}
 		case 's':
+			if !t.showEQ && !t.showPresets {
+				return true
+			}
 			if t.showPresets {
 				bpn := len(engine.BuiltinPresets)
 				if t.presetIdx >= bpn && t.presetIdx < t.eng.PresetCount() {
@@ -497,6 +510,7 @@ func (t *TUI) renderHelp(sb *strings.Builder) {
 		"  \033[1m,\033[0m/\033[1m.\033[0m    Buffer        Increase/decrease buffer size",
 		"  \033[1mm\033[0m      Mute          Toggle mute on/off",
 		"  \033[1me\033[0m      Equalizer     Show/hide 10-band EQ",
+		"  \033[1ms\033[0m      Save          Quick-save EQ to active custom slot",
 		"  \033[1mp\033[0m      Presets       Browse and apply EQ presets",
 		"  \033[1mh\033[0m      Help          Show/hide this help",
 		"  \033[1mq\033[0m      Quit          Exit the application",
@@ -825,7 +839,7 @@ func (t *TUI) renderEQ(sb *strings.Builder, bw int) {
 	row = helpBarTop
 
 	// Help bar (anchored to bottom)
-	helpText := "  \033[90m←/→\033[0m Band   \033[90m↑/↓\033[0m Gain   \033[90mr\033[0m Reset   \033[90mm\033[0m Mute   \033[90mp\033[0m Presets   \033[90me\033[0m Back   \033[90mq\033[0m Quit"
+	helpText := "  ←/→ Band   ↑/↓ Gain   r Reset   s Save   m Mute   p Presets   e Back   q Quit"
 	helpTextLen := displayLen(helpText)
 	helpBoxWidth := bw
 	if helpBoxWidth < helpTextLen+4 {
