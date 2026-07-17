@@ -117,7 +117,7 @@ jobs:
             PKG_CONFIG_PATH="$SYSROOT/usr/lib/aarch64-linux-gnu/pkgconfig" \
             --without-jack --with-alsa --disable-shared --enable-static
           make -j$(nproc)
-          make install DESTDIR=$SYSROOT
+          sudo make install DESTDIR=$SYSROOT
 
           echo "=== ALSA ==="
           ls -la "$SYSROOT/usr/lib/aarch64-linux-gnu"/libasound.* "$SYSROOT/usr/include/alsa/asoundlib.h" 2>&1
