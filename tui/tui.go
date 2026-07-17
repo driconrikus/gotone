@@ -738,7 +738,7 @@ func stripANSI(s string) string {
 }
 
 func displayLen(s string) int {
-	return len([]rune(s))
+	return len([]rune(stripANSI(s)))
 }
 
 func padBoxLine(s string, width int) string {
