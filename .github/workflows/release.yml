@@ -164,33 +164,22 @@ jobs:
           ls -la C:/vcpkg/installed/x64-windows/include/portaudio.h
           ls -la C:/vcpkg/installed/x64-windows/lib/portaudio.lib
 
-          # Convert $HOME to Windows path so Go's exec.LookPath can find our wrapper
-          WINHOME=$(cygpath -w "$HOME")
-          BINDIR="$WINHOME/.local/bin"
-          mkdir -p "$BINDIR"
-
-          # Write pkg-config.bat with Windows-style paths (no MSYS2 sysroot mangling)
-          cat > "$BINDIR/pkg-config.bat" << 'BAT'
-@echo off
-if /i "%~1"=="--cflags" (echo -I%VCPKG_ROOT%/installed/x64-windows/include & exit /b 0)
-if /i "%~1"=="--libs" (echo -L%VCPKG_ROOT%/installed/x64-windows/lib -lportaudio & exit /b 0)
-exit /b 0
-BAT
-          echo "=== pkg-config.bat contents ==="
-          cat "$BINDIR/pkg-config.bat"
-
-          # Prepend Windows-style path to PATH so Go/cgo find our wrapper
-          export PATH="$BINDIR:$PATH"
-          echo "=== PATH ==="
-          echo "$PATH" | tr ':' '\n' | head -5
+          # Write pkg-config wrapper to fixed known path
+          cat > "C:/vcpkg/pkg-config.bat" << 'BAT'
+          @echo off
+          if /i "%~1"=="--cflags" (echo -IC:/vcpkg/installed/x64-windows/include & exit /b 0)
+          if /i "%~1"=="--libs" (echo -LC:/vcpkg/installed/x64-windows/lib -lportaudio & exit /b 0)
+          exit /b 0
+          BAT
+          echo "=== pkg-config.bat ==="
+          cat "C:/vcpkg/pkg-config.bat"
 
           mkdir -p dist
           CGO_ENABLED=1 GOOS=windows GOARCH=amd64 \
-            PKG_CONFIG="$BINDIR/pkg-config.bat" \
-            CGO_CFLAGS="-IC:/vcpkg/installed/x64-windows/include" \
-            CGO_LDFLAGS="-LC:/vcpkg/installed/x64-windows/lib" \
             go build -ldflags="-s -w -X main.version=${{ github.ref_name }}" -o dist/gotone-windows-amd64.exe .
         shell: bash
+        env:
+          PKG_CONFIG: "C:/vcpkg/pkg-config.bat"
 
       - uses: actions/upload-artifact@v4
         with:
