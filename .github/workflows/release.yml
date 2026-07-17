@@ -64,8 +64,9 @@ jobs:
           sudo mkdir -p "$SYSROOT"
           cd /tmp
           # Download and parse arm64 ALSA version from archive.ubuntu.com
-          wget -q "http://archive.ubuntu.com/ubuntu/dists/noble/main/binary-arm64/Packages.gz" \
-            -O /tmp/Packages-arm64.gz
+          UBUNTU_PORTS="http://ports.ubuntu.com/ubuntu-ports"
+          wget -q "$UBUNTU_PORTS/dists/noble/main/binary-arm64/Packages.gz" \
+            -O /tmp/Packages-arm64.gz || true
           ALSA_VER=$(gzip -dc /tmp/Packages-arm64.gz 2>/dev/null \
             | sed -n '/^Package: libasound2$/,/^$/p' \
             | grep '^Version:' | sed 's/^Version: //')
@@ -75,7 +76,7 @@ jobs:
             ALSA_VER="1.2.11-1build2"
           fi
           for pkg in libasound2 libasound2-dev; do
-            url="http://archive.ubuntu.com/ubuntu/pool/main/a/alsa-lib/${pkg}_${ALSA_VER}_arm64.deb"
+            url="$UBUNTU_PORTS/pool/main/a/alsa-lib/${pkg}_${ALSA_VER}_arm64.deb"
             echo "Downloading $url"
             wget -q "$url" || { echo "Failed: $url"; exit 1; }
           done
