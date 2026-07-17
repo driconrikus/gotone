@@ -606,13 +606,19 @@ func (t *TUI) renderEQ(sb *strings.Builder, bw int) {
 		}
 	}
 	line(row, gainLine.String())
-	row += 2
+	row++
 
 	// dB reference
 	line(row, "  \033[90m+12 dB max · 0 dB flat · -12 dB min\033[0m"); row++
-	row++
 
-	// Help bar
+	// Blank rows between content and bottom bar
+	helpBarStart := t.termHeight - 4
+	for ; row < helpBarStart; row++ {
+		sb.WriteString(fmt.Sprintf("\033[%d;1H\033[K", row))
+	}
+	row = helpBarStart
+
+	// Help bar (anchored to bottom)
 	helpText := "  \033[90m←/→\033[0m Band   \033[90m↑/↓\033[0m Gain   \033[90mr\033[0m Reset   \033[90me\033[0m Back   \033[90mq\033[0m Quit"
 	helpTextLen := displayLen(helpText)
 	helpBoxWidth := bw
