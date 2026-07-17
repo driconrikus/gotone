@@ -1,5 +1,8 @@
 # GoTone - Audio Monitor
 
+[![build](https://github.com/driconrikus/gotone/actions/workflows/ci.yml/badge.svg)](https://github.com/driconrikus/gotone/actions/workflows/ci.yml)
+[![release](https://github.com/driconrikus/gotone/actions/workflows/release.yml/badge.svg)](https://github.com/driconrikus/gotone/releases/latest)
+
 A lightweight, real-time audio monitor and router for your terminal. Route audio from any input to any output channel with minimal latency.
 
 ## What it does
