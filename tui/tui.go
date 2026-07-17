@@ -422,6 +422,8 @@ func (t *TUI) renderEQ(sb *strings.Builder, bw int) {
 	}
 
 	row := 1
+
+	// Title box
 	sb.WriteString("\033[1;36m")
 	title := "Equalizer"
 	titlePad := (bw - 2 - displayLen(title)) / 2
@@ -431,122 +433,199 @@ func (t *TUI) renderEQ(sb *strings.Builder, bw int) {
 	sb.WriteString("\033[0m")
 	row++
 
-	// EQ bar display: 7 rows tall, 0 dB in center
-	barHeight := 7
-	barSpacing := 3 // chars between bars
-	totalBarWidth := bands * (1 + barSpacing)
-	startCol := (bw - totalBarWidth) / 2
-	if startCol < 2 {
-		startCol = 2
+	// dB scale: +12, +6, 0, -6, -12 → 9 rows (row 0 = +12, row 4 = 0, row 8 = -12)
+	// Bar columns: 1 char each, 1 char spacing between bands
+	// Left margin: 6 chars for dB labels + 1 space
+	dbLabels := []string{"+12", " +6", "  0", " -6", "-12"}
+	dbRows := 9 // 0..8, center at row 4
+	centerRow := 4
+
+	scaleWidth := 7 // "  -12 " with the tick
+	barColWidth := 2 // 1 char bar + 1 char space
+	totalBarWidth := bands * barColWidth
+
+	// Calculate start column for bars (centered in available width)
+	availableWidth := bw - scaleWidth
+	startCol := scaleWidth + (availableWidth-totalBarWidth)/2
+	if startCol < scaleWidth+1 {
+		startCol = scaleWidth + 1
 	}
 
-	for i := 0; i < barHeight; i++ {
-		pad := strings.Repeat(" ", startCol)
+	for i := 0; i < dbRows; i++ {
 		var sb2 strings.Builder
-		sb2.WriteString(pad)
+
+		// dB label
+		if i == 0 || i == 2 || i == 4 || i == 6 || i == 8 {
+			idx := i / 2
+			sb2.WriteString(fmt.Sprintf("  \033[90m%s\033[0m", dbLabels[idx]))
+		} else {
+			sb2.WriteString("       ")
+		}
+
+		// Tick mark
+		if i == centerRow {
+			sb2.WriteString("\033[90m┤\033[0m")
+		} else {
+			sb2.WriteString("\033[90m┤\033[0m")
+		}
+
+		// Pad to start column
+		for sb2.Len() < startCol && len(sb2.String()) < startCol {
+			sb2.WriteString(" ")
+		}
+
 		for b := 0; b < bands; b++ {
 			gain := t.eng.EQBandGain(b)
-			// Map gain (-12..+12) to bar position (0..6 from top)
-			// Row 0 = +12 dB (top), row 3 = 0 dB (center), row 6 = -12 dB (bottom)
-			gainRow := 3 - (gain * 3 / 12)
+			selected := b == t.eqBand
+
+			// Map gain to rows from center (each row = 3 dB)
+			// gain +12 → fills rows 0..3 (from top), gain 0 → only row 4, gain -12 → fills rows 5..8
+			gainRowsUp := 0
+			gainRowsDown := 0
 			if gain > 0 {
-				gainRow = 3 - gain*3/12
+				gainRowsUp = int(gain / 3)
+				if gainRowsUp > 4 {
+					gainRowsUp = 4
+				}
 			} else if gain < 0 {
-				gainRow = 3 + (-gain)*3/12
-			}
-			if gainRow < 0 {
-				gainRow = 0
-			}
-			if gainRow > 6 {
-				gainRow = 6
+				gainRowsDown = int((-gain) / 3)
+				if gainRowsDown > 4 {
+					gainRowsDown = 4
+				}
 			}
 
-			var bar string
-			if i == gainRow {
-				if b == t.eqBand {
-					bar = "\033[1;97m█\033[0m" // selected: bright white
+			var cell string
+			if i == centerRow {
+				// Center line (0 dB) — always show as dashed line
+				if selected {
+					cell = "\033[1;97m━\033[0m"
 				} else {
-					bar = "\033[1;36m█\033[0m" // normal: cyan
+					cell = "\033[90m━\033[0m"
 				}
-			} else if i == 3 {
-				// center line (0 dB)
-				if b == t.eqBand {
-					bar = "\033[90m─\033[0m"
+			} else if gain > 0 && i >= (centerRow-gainRowsUp) && i < centerRow {
+				// Positive fill: filled from center going up
+				if i == (centerRow - gainRowsUp) {
+					// Tip of the bar
+					if selected {
+						cell = "\033[1;97m▀\033[0m"
+					} else {
+						cell = "\033[32m▀\033[0m"
+					}
 				} else {
-					bar = "\033[90m·\033[0m"
+					if selected {
+						cell = "\033[97m█\033[0m"
+					} else {
+						cell = "\033[32m█\033[0m"
+					}
 				}
-			} else if gain > 0 && i > gainRow && i < 3 {
-				// filled above center (positive gain)
-				if b == t.eqBand {
-					bar = "\033[97m│\033[0m"
+			} else if gain < 0 && i > centerRow && i <= (centerRow+gainRowsDown) {
+				// Negative fill: filled from center going down
+				if i == (centerRow + gainRowsDown) {
+					// Tip of the bar
+					if selected {
+						cell = "\033[1;97m▄\033[0m"
+					} else {
+						cell = "\033[31m▄\033[0m"
+					}
 				} else {
-					bar = "\033[36m│\033[0m"
+					if selected {
+						cell = "\033[97m█\033[0m"
+					} else {
+						cell = "\033[31m█\033[0m"
+					}
 				}
-			} else if gain < 0 && i < gainRow && i > 3 {
-				// filled below center (negative gain)
-				if b == t.eqBand {
-					bar = "\033[97m│\033[0m"
+			} else if i == (centerRow - gainRowsUp) && gain > 0 && gainRowsUp == 0 {
+				// Gain is very small positive, show marker at center
+				if selected {
+					cell = "\033[1;97m▀\033[0m"
 				} else {
-					bar = "\033[36m│\033[0m"
+					cell = "\033[32m▀\033[0m"
+				}
+			} else if i == (centerRow + gainRowsDown) && gain < 0 && gainRowsDown == 0 {
+				if selected {
+					cell = "\033[1;97m▄\033[0m"
+				} else {
+					cell = "\033[31m▄\033[0m"
 				}
 			} else {
-				bar = " "
+				cell = " "
 			}
-			sb2.WriteString(bar)
-			sb2.WriteString(strings.Repeat(" ", barSpacing))
+
+			sb2.WriteString(cell)
+			sb2.WriteString(" ")
 		}
 		line(row, sb2.String())
 		row++
 	}
 
-	// dB labels on left side
-	row++ // skip a line
-
 	// Frequency labels
-	pad := strings.Repeat(" ", startCol)
+	row++
+	freqLabelWidth := 4
+	freqSpacing := 2
+	freqTotalWidth := bands * (freqLabelWidth + freqSpacing) - freqSpacing
+	freqStartCol := startCol + (totalBarWidth-freqTotalWidth)/2
+	if freqStartCol < startCol {
+		freqStartCol = startCol
+	}
+
 	var freqLine strings.Builder
-	freqLine.WriteString(pad)
+	freqLine.WriteString(strings.Repeat(" ", freqStartCol))
 	for b := 0; b < bands; b++ {
 		freq := freqs[b]
 		var label string
 		if freq >= 1000 {
-			label = fmt.Sprintf("%2.0fk", freq/1000)
+			khz := freq / 1000
+			if khz == math.Trunc(khz) {
+				label = fmt.Sprintf("%.0fkHz", khz)
+			} else {
+				label = fmt.Sprintf("%.1fkHz", khz)
+			}
 		} else {
-			label = fmt.Sprintf("%3.0f", freq)
+			label = fmt.Sprintf("%.0fHz", freq)
 		}
 		if b == t.eqBand {
-			freqLine.WriteString(fmt.Sprintf("\033[1;97m%s\033[0m", label))
+			freqLine.WriteString(fmt.Sprintf("\033[1;97m%-4s\033[0m", label))
 		} else {
-			freqLine.WriteString(label)
+			freqLine.WriteString(fmt.Sprintf("%-4s", label))
 		}
-		freqLine.WriteString(strings.Repeat(" ", barSpacing))
+		if b < bands-1 {
+			freqLine.WriteString(strings.Repeat(" ", freqSpacing))
+		}
 	}
 	line(row, freqLine.String())
 	row++
 
-	// Gain values
+	// Gain values below frequencies
 	var gainLine strings.Builder
-	gainLine.WriteString(pad)
+	gainLine.WriteString(strings.Repeat(" ", freqStartCol))
 	for b := 0; b < bands; b++ {
 		g := t.eng.EQBandGain(b)
 		var gstr string
 		if g > 0 {
 			gstr = fmt.Sprintf("+%d", g)
+		} else if g < 0 {
+			gstr = fmt.Sprintf("%d", g)
 		} else {
-			gstr = fmt.Sprintf("%3d", g)
+			gstr = "  0"
 		}
 		if b == t.eqBand {
-			gainLine.WriteString(fmt.Sprintf("\033[1;97m%s\033[0m", gstr))
+			gainLine.WriteString(fmt.Sprintf("\033[1;97m%-4s\033[0m", gstr))
 		} else {
-			gainLine.WriteString(gstr)
+			gainLine.WriteString(fmt.Sprintf("%-4s", gstr))
 		}
-		gainLine.WriteString(strings.Repeat(" ", barSpacing))
+		if b < bands-1 {
+			gainLine.WriteString(strings.Repeat(" ", freqSpacing))
+		}
 	}
 	line(row, gainLine.String())
 	row += 2
 
+	// dB reference line
+	line(row, "  \033[90m+12 dB max · 0 dB flat · -12 dB min\033[0m"); row++
+	row++
+
 	// Help bar
-	helpText := "  ←/→  Band   ↑/↓  Gain   r  Reset   e  Back   q  Quit"
+	helpText := "  \033[90m←/→\033[0m Band   \033[90m↑/↓\033[0m Gain   \033[90mr\033[0m Reset   \033[90me\033[0m Back   \033[90mq\033[0m Quit"
 	helpTextLen := displayLen(helpText)
 	helpBoxWidth := bw
 	if helpBoxWidth < helpTextLen+4 {
