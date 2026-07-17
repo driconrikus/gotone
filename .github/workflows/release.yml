@@ -55,19 +55,22 @@ jobs:
           go-version: '1.21'
 
       - name: Install portaudio
-        run: sudo apt-get update && sudo apt-get install -y portaudio19-dev
+        run: sudo apt-get update && sudo apt-get install -y portaudio19-dev gcc-aarch64-linux-gnu
 
       - name: Install arm64 cross dependencies
         if: matrix.arch == 'arm64'
         run: |
           SYSROOT=/usr/aarch64-linux-gnu
-          ALSA_VER=$(dpkg -s libasound2-dev 2>/dev/null | awk '/^Version:/{print $2}')
-          [ -z "$ALSA_VER" ] && ALSA_VER="1.2.11-1build2"
           cd /tmp
+          # Query archive.ubuntu.com for the arm64 ALSA version
+          ALSA_VER=$(wget -qO- http://archive.ubuntu.com/ubuntu/dists/noble/main/binary-arm64/Packages.gz \
+            | gunzip -c 2>/dev/null \
+            | awk '/^Package: libasound2$/{found=1; next} found && /^Version:/{print $2; exit}')
+          echo "ALSA arm64 version: $ALSA_VER"
           for pkg in libasound2 libasound2-dev; do
             url="http://archive.ubuntu.com/ubuntu/pool/main/a/alsa-lib/${pkg}_${ALSA_VER}_arm64.deb"
             echo "Downloading $url"
-            wget -q "$url" || echo "Failed: $url"
+            wget -q "$url" || { echo "Failed: $url"; exit 1; }
           done
           sudo mkdir -p "$SYSROOT"
           for deb in /tmp/libasound2*.deb; do
@@ -90,7 +93,6 @@ jobs:
           mkdir -p dist
           binary="gotone-linux-${{ matrix.arch }}"
           if [ "${{ matrix.arch }}" = "arm64" ]; then
-            sudo apt-get install -y gcc-aarch64-linux-gnu
             export CC=aarch64-linux-gnu-gcc
             export PKG_CONFIG_PATH=/usr/aarch64-linux-gnu/usr/lib/pkgconfig
           fi
