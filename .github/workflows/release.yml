@@ -60,17 +60,28 @@ jobs:
       - name: Install arm64 cross dependencies
         if: matrix.arch == 'arm64'
         run: |
-          sudo dpkg --add-architecture arm64
-          # Restrict existing apt sources to amd64 only (security.ubuntu.com doesn't serve arm64)
-          sudo sed -i 's/^deb /deb [arch=amd64] /g' /etc/apt/sources.list
-          sudo sed -i 's/^deb /deb [arch=amd64] /g' /etc/apt/sources.list.d/*.list 2>/dev/null || true
-          # Add archive.ubuntu.com for arm64 packages
-          echo "deb [arch=arm64] http://archive.ubuntu.com/ubuntu noble main universe" | sudo tee /etc/apt/sources.list.d/arm64.list
-          sudo apt-get update
-          sudo apt-get install -y libasound2-dev:arm64
+          SYSROOT=/usr/aarch64-linux-gnu
+          ALSA_VER=$(dpkg -s libasound2-dev 2>/dev/null | awk '/^Version:/{print $2}')
+          [ -z "$ALSA_VER" ] && ALSA_VER="1.2.11-1build2"
+          cd /tmp
+          for pkg in libasound2 libasound2-dev; do
+            url="http://archive.ubuntu.com/ubuntu/pool/main/a/alsa-lib/${pkg}_${ALSA_VER}_arm64.deb"
+            echo "Downloading $url"
+            wget -q "$url" || echo "Failed: $url"
+          done
+          sudo mkdir -p "$SYSROOT"
+          for deb in /tmp/libasound2*.deb; do
+            if [ -f "$deb" ]; then
+              dir=$(mktemp -d)
+              dpkg-deb -x "$deb" "$dir"
+              sudo cp -r "$dir/usr" "$SYSROOT/"
+              rm -rf "$dir"
+            fi
+          done
           git clone --depth 1 https://github.com/PortAudio/portaudio.git /tmp/portaudio
           cd /tmp/portaudio
-          sudo ./configure --host=aarch64-linux-gnu --prefix=/usr/aarch64-linux-gnu
+          sudo ./configure --host=aarch64-linux-gnu --prefix="$SYSROOT/usr" \
+            CC=aarch64-linux-gnu-gcc
           sudo make -j$(nproc)
           sudo make install
 
@@ -81,7 +92,7 @@ jobs:
           if [ "${{ matrix.arch }}" = "arm64" ]; then
             sudo apt-get install -y gcc-aarch64-linux-gnu
             export CC=aarch64-linux-gnu-gcc
-            export PKG_CONFIG_PATH=/usr/aarch64-linux-gnu/lib/pkgconfig
+            export PKG_CONFIG_PATH=/usr/aarch64-linux-gnu/usr/lib/pkgconfig
           fi
           CGO_ENABLED=1 GOOS=linux GOARCH=${{ matrix.arch }} \
             go build -ldflags="-s -w -X main.version=${{ github.ref_name }}" -o "dist/${binary}" .
