@@ -12,12 +12,8 @@ jobs:
   build-macos:
     strategy:
       matrix:
-        include:
-          - arch: arm64
-            runs-on: macos-latest
-          - arch: amd64
-            runs-on: macos-13
-    runs-on: ${{ matrix.runs-on }}
+        arch: [arm64, amd64]
+    runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
 
@@ -25,17 +21,36 @@ jobs:
         with:
           go-version: '1.21'
 
-      - name: Install portaudio
+      - name: Install portaudio (native)
+        if: matrix.arch == 'arm64'
         run: brew install portaudio
+
+      - name: Build portaudio (x86_64 cross)
+        if: matrix.arch == 'amd64'
+        run: |
+          git clone --depth 1 https://github.com/PortAudio/portaudio.git /tmp/portaudio
+          cd /tmp/portaudio
+          mkdir -p /tmp/portaudio-x86_64
+          ./configure --host=x86_64-apple-darwin \
+            CC="cc -arch x86_64" \
+            CFLAGS="-arch x86_64" \
+            LDFLAGS="-arch x86_64" \
+            --prefix=/tmp/portaudio-x86_64
+          make -j$(nproc)
+          make install
 
       - name: Build
         run: |
           mkdir -p dist
           binary="gotone-darwin-${{ matrix.arch }}"
+          if [ "${{ matrix.arch }}" = "amd64" ]; then
+            export PKG_CONFIG_PATH=/tmp/portaudio-x86_64/lib/pkgconfig
+            export CC="cc -arch x86_64"
+          else
+            export PKG_CONFIG_PATH=/opt/homebrew/lib/pkgconfig
+          fi
           CGO_ENABLED=1 GOOS=darwin GOARCH=${{ matrix.arch }} \
             go build -ldflags="-s -w -X main.version=${{ github.ref_name }}" -o "dist/${binary}" .
-        env:
-          PKG_CONFIG_PATH: ${{ matrix.arch == 'arm64' && '/opt/homebrew/lib/pkgconfig' || '/usr/local/lib/pkgconfig' }}
 
       - uses: actions/upload-artifact@v4
         with:
