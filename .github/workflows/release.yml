@@ -82,10 +82,8 @@ jobs:
           # Add arm64 architecture and Ubuntu ports repo
           sudo dpkg --add-architecture arm64
           codename=$(grep UBUNTU_CODENAME /etc/os-release | cut -d= -f2)
-          sudo tee /etc/apt/sources.list.d/arm64.list > /dev/null <<EOF
-deb [arch=arm64] http://ports.ubuntu.com/ubuntu-ports $codename main universe multiverse restricted
-deb [arch=arm64] http://ports.ubuntu.com/ubuntu-ports $codename-updates main universe multiverse restricted
-EOF
+          echo "deb [arch=arm64] http://ports.ubuntu.com/ubuntu-ports $codename main universe multiverse restricted" | sudo tee /etc/apt/sources.list.d/arm64.list > /dev/null
+          echo "deb [arch=arm64] http://ports.ubuntu.com/ubuntu-ports $codename-updates main universe multiverse restricted" | sudo tee -a /etc/apt/sources.list.d/arm64.list > /dev/null
           sudo apt-get update -qq
 
           # Download arm64 debs (matching runner's Ubuntu release)
