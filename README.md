@@ -128,6 +128,11 @@ git push origin v0.1.0
 
 Both trigger a GitHub Actions build that produces binaries for macOS (arm64, amd64), Linux (amd64, arm64), and Windows (amd64). Beta tags are marked as pre-releases.
 
+## To-do
+
+- [x] 10-band EQ
+- [ ] VST / AU plugin hosting (future)
+
 ## License
 
 MIT
