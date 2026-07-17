@@ -17,6 +17,7 @@ You want a quick test of your instrument but find dowloading and setting up a fu
 - **Mute toggle** — instant mute/unmute
 - **Real-time level meters** — RMS meters with peak hold, 10 fps refresh
 - **Adjustable buffer size** — trade latency for CPU (16 to 4096 frames)
+- **10-band equalizer** — graphical EQ with peaking biquad filters (32 Hz–16 kHz)
 - **Cross-platform** — macOS, Linux, Windows
 
 ## Install
@@ -64,10 +65,12 @@ Walks you through selecting input device, output device, and output channel.
 
 | Key | Action |
 |-----|--------|
-| ↑ / ↓ | Gain +1 dB / -1 dB |
-| ← / → | Output channel -1 / +1 |
+| ↑ / ↓ | Gain +1 dB / -1 dB (or EQ band gain when on EQ page) |
+| ← / → | Output channel -1 / +1 (or EQ band select when on EQ page) |
 | , / . | Buffer size ×2 / ÷2 |
 | m | Mute / unmute |
+| e | Show/hide 10-band EQ |
+| r | Reset EQ to flat (on EQ page) |
 | h | Show/hide help |
 | q | Quit |
 

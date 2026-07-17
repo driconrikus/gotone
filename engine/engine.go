@@ -37,6 +37,8 @@ type Engine struct {
 	outputChannel  int // 1-indexed selected output channel
 	outputChannels int // total output channels available
 
+	eq *EQ
+
 	stats   Stats
 	statsMu sync.RWMutex
 }
@@ -120,6 +122,7 @@ func New(inputIdx, outputIdx, sampleRate, framesPerBuffer, outputChannel int) (*
 		outputChannel:  outputChannel,
 		outputChannels: outDev.MaxOutputChannels,
 		gain:           1.0,
+		eq:             NewEQ(float64(sampleRate)),
 	}
 
 	outChans := outDev.MaxOutputChannels
@@ -194,6 +197,7 @@ func (e *Engine) processCallback(input []float32, output []float32) {
 		if e.channels > 1 {
 			sample /= float32(e.channels) // average
 		}
+		sample = float32(e.eq.ProcessSample(float64(sample)))
 		if muted {
 			sample = 0
 		} else {
@@ -378,4 +382,24 @@ func RMSdB(level float64) float64 {
 		return -120.0
 	}
 	return 20.0 * math.Log10(level)
+}
+
+func (e *Engine) EQBands() int {
+	return eqBands
+}
+
+func (e *Engine) EQFrequencies() []float64 {
+	return e.eq.Frequencies()
+}
+
+func (e *Engine) SetEQBand(band, gainDB int) {
+	e.eq.SetBand(band, float64(gainDB))
+}
+
+func (e *Engine) EQBandGain(band int) int {
+	return int(math.Round(e.eq.BandGain(band)))
+}
+
+func (e *Engine) ResetEQ() {
+	e.eq.Reset()
 }

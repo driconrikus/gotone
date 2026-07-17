@@ -32,6 +32,8 @@ type TUI struct {
 	termWidth  int
 	termHeight int
 	showHelp   bool
+	showEQ     bool
+	eqBand     int
 
 	mu sync.Mutex
 }
@@ -156,6 +158,14 @@ func (t *TUI) handleInput(b []byte) bool {
 		case 'h', 'H':
 			t.showHelp = !t.showHelp
 			return true
+		case 'e', 'E':
+			t.showEQ = !t.showEQ
+			return true
+		case 'r', 'R':
+			if t.showEQ {
+				t.eng.ResetEQ()
+				return true
+			}
 		case ',':
 			newBuf := t.eng.FramesPerBuffer() * 2
 			if newBuf > 4096 {
@@ -179,32 +189,54 @@ func (t *TUI) handleInput(b []byte) bool {
 	if len(b) == 3 && b[0] == 27 && b[1] == '[' {
 		switch b[2] {
 		case 'A':
-			gain := t.eng.GetGain() + 1.0
-			if gain > 24.0 {
-				gain = 24.0
+			if t.showEQ {
+				t.eng.SetEQBand(t.eqBand, t.eng.EQBandGain(t.eqBand)+1)
+			} else {
+				gain := t.eng.GetGain() + 1.0
+				if gain > 24.0 {
+					gain = 24.0
+				}
+				t.eng.SetGain(gain)
 			}
-			t.eng.SetGain(gain)
 			return true
 		case 'B':
-			gain := t.eng.GetGain() - 1.0
-			if gain < -60.0 {
-				gain = -60.0
+			if t.showEQ {
+				t.eng.SetEQBand(t.eqBand, t.eng.EQBandGain(t.eqBand)-1)
+			} else {
+				gain := t.eng.GetGain() - 1.0
+				if gain < -60.0 {
+					gain = -60.0
+				}
+				t.eng.SetGain(gain)
 			}
-			t.eng.SetGain(gain)
 			return true
 		case 'C':
-			ch := t.eng.OutputChannel() + 1
-			if ch > t.eng.OutputChannels() {
-				ch = t.eng.OutputChannels()
+			if t.showEQ {
+				t.eqBand++
+				if t.eqBand >= t.eng.EQBands() {
+					t.eqBand = t.eng.EQBands() - 1
+				}
+			} else {
+				ch := t.eng.OutputChannel() + 1
+				if ch > t.eng.OutputChannels() {
+					ch = t.eng.OutputChannels()
+				}
+				t.eng.SetOutputChannel(ch)
 			}
-			t.eng.SetOutputChannel(ch)
 			return true
 		case 'D':
-			ch := t.eng.OutputChannel() - 1
-			if ch < 1 {
-				ch = 1
+			if t.showEQ {
+				t.eqBand--
+				if t.eqBand < 0 {
+					t.eqBand = 0
+				}
+			} else {
+				ch := t.eng.OutputChannel() - 1
+				if ch < 1 {
+					ch = 1
+				}
+				t.eng.SetOutputChannel(ch)
 			}
-			t.eng.SetOutputChannel(ch)
 			return true
 		}
 	}
@@ -250,6 +282,12 @@ func (t *TUI) renderFull() {
 
 	if t.showHelp {
 		t.renderHelp(&sb)
+		os.Stdout.Write([]byte(sb.String()))
+		return
+	}
+
+	if t.showEQ {
+		t.renderEQ(&sb, bw)
 		os.Stdout.Write([]byte(sb.String()))
 		return
 	}
@@ -313,7 +351,7 @@ func (t *TUI) renderFull() {
 	line(row, ""); row++
 
 	// Help bar
-	helpText := "  ↑/↓  Gain   ←/→  Channel   </>  Buffer   m  Mute   h  Help   q  Quit"
+		helpText := "  ↑/↓  Gain   ←/→  Channel   </>  Buffer   m  Mute   e  EQ   h  Help   q  Quit"
 	helpTextLen := displayLen(helpText)
 	helpBoxWidth := bw
 	if helpBoxWidth < helpTextLen+4 {
@@ -351,6 +389,7 @@ func (t *TUI) renderHelp(sb *strings.Builder) {
 		"  \033[1m←\033[0m/\033[1m→\033[0m    Channel       Change output channel",
 		"  \033[1m,\033[0m/\033[1m.\033[0m    Buffer        Increase/decrease buffer size",
 		"  \033[1mm\033[0m      Mute          Toggle mute on/off",
+		"  \033[1me\033[0m      Equalizer     Show/hide 10-band EQ",
 		"  \033[1mh\033[0m      Help          Show/hide this help",
 		"  \033[1mq\033[0m      Quit          Exit the application",
 		"",
@@ -372,6 +411,165 @@ func (t *TUI) renderHelp(sb *strings.Builder) {
 	bot := "  ╚" + strings.Repeat("═", bw-2) + "╝"
 	sb.WriteString(fmt.Sprintf("\033[%d;1H%s\033[K", startRow+1+len(lines), bot))
 	sb.WriteString("\033[0m")
+}
+
+func (t *TUI) renderEQ(sb *strings.Builder, bw int) {
+	freqs := t.eng.EQFrequencies()
+	bands := t.eng.EQBands()
+
+	line := func(row int, s string) {
+		sb.WriteString(fmt.Sprintf("\033[%d;1H%s\033[K", row, s))
+	}
+
+	row := 1
+	sb.WriteString("\033[1;36m")
+	title := "Equalizer"
+	titlePad := (bw - 2 - displayLen(title)) / 2
+	line(row, "  ╔"+strings.Repeat("═", bw-2)+"╗"); row++
+	line(row, "  ║"+strings.Repeat(" ", titlePad)+title+strings.Repeat(" ", bw-2-titlePad-displayLen(title))+"║"); row++
+	line(row, "  ╚"+strings.Repeat("═", bw-2)+"╝"); row++
+	sb.WriteString("\033[0m")
+	row++
+
+	// EQ bar display: 7 rows tall, 0 dB in center
+	barHeight := 7
+	barSpacing := 3 // chars between bars
+	totalBarWidth := bands * (1 + barSpacing)
+	startCol := (bw - totalBarWidth) / 2
+	if startCol < 2 {
+		startCol = 2
+	}
+
+	for i := 0; i < barHeight; i++ {
+		pad := strings.Repeat(" ", startCol)
+		var sb2 strings.Builder
+		sb2.WriteString(pad)
+		for b := 0; b < bands; b++ {
+			gain := t.eng.EQBandGain(b)
+			// Map gain (-12..+12) to bar position (0..6 from top)
+			// Row 0 = +12 dB (top), row 3 = 0 dB (center), row 6 = -12 dB (bottom)
+			gainRow := 3 - (gain * 3 / 12)
+			if gain > 0 {
+				gainRow = 3 - gain*3/12
+			} else if gain < 0 {
+				gainRow = 3 + (-gain)*3/12
+			}
+			if gainRow < 0 {
+				gainRow = 0
+			}
+			if gainRow > 6 {
+				gainRow = 6
+			}
+
+			var bar string
+			if i == gainRow {
+				if b == t.eqBand {
+					bar = "\033[1;97m█\033[0m" // selected: bright white
+				} else {
+					bar = "\033[1;36m█\033[0m" // normal: cyan
+				}
+			} else if i == 3 {
+				// center line (0 dB)
+				if b == t.eqBand {
+					bar = "\033[90m─\033[0m"
+				} else {
+					bar = "\033[90m·\033[0m"
+				}
+			} else if gain > 0 && i > gainRow && i < 3 {
+				// filled above center (positive gain)
+				if b == t.eqBand {
+					bar = "\033[97m│\033[0m"
+				} else {
+					bar = "\033[36m│\033[0m"
+				}
+			} else if gain < 0 && i < gainRow && i > 3 {
+				// filled below center (negative gain)
+				if b == t.eqBand {
+					bar = "\033[97m│\033[0m"
+				} else {
+					bar = "\033[36m│\033[0m"
+				}
+			} else {
+				bar = " "
+			}
+			sb2.WriteString(bar)
+			sb2.WriteString(strings.Repeat(" ", barSpacing))
+		}
+		line(row, sb2.String())
+		row++
+	}
+
+	// dB labels on left side
+	row++ // skip a line
+
+	// Frequency labels
+	pad := strings.Repeat(" ", startCol)
+	var freqLine strings.Builder
+	freqLine.WriteString(pad)
+	for b := 0; b < bands; b++ {
+		freq := freqs[b]
+		var label string
+		if freq >= 1000 {
+			label = fmt.Sprintf("%2.0fk", freq/1000)
+		} else {
+			label = fmt.Sprintf("%3.0f", freq)
+		}
+		if b == t.eqBand {
+			freqLine.WriteString(fmt.Sprintf("\033[1;97m%s\033[0m", label))
+		} else {
+			freqLine.WriteString(label)
+		}
+		freqLine.WriteString(strings.Repeat(" ", barSpacing))
+	}
+	line(row, freqLine.String())
+	row++
+
+	// Gain values
+	var gainLine strings.Builder
+	gainLine.WriteString(pad)
+	for b := 0; b < bands; b++ {
+		g := t.eng.EQBandGain(b)
+		var gstr string
+		if g > 0 {
+			gstr = fmt.Sprintf("+%d", g)
+		} else {
+			gstr = fmt.Sprintf("%3d", g)
+		}
+		if b == t.eqBand {
+			gainLine.WriteString(fmt.Sprintf("\033[1;97m%s\033[0m", gstr))
+		} else {
+			gainLine.WriteString(gstr)
+		}
+		gainLine.WriteString(strings.Repeat(" ", barSpacing))
+	}
+	line(row, gainLine.String())
+	row += 2
+
+	// Help bar
+	helpText := "  ←/→  Band   ↑/↓  Gain   r  Reset   e  Back   q  Quit"
+	helpTextLen := displayLen(helpText)
+	helpBoxWidth := bw
+	if helpBoxWidth < helpTextLen+4 {
+		helpBoxWidth = helpTextLen + 4
+	}
+	helpInner := helpBoxWidth - 2
+	helpContent := helpText
+	if helpTextLen > helpInner {
+		helpContent = truncate(helpText, helpInner)
+	}
+	helpContentLen := displayLen(helpContent)
+	if helpContentLen < helpInner {
+		helpContent += strings.Repeat(" ", helpInner-helpContentLen)
+	}
+	sb.WriteString("\033[90m")
+	line(row, "  ┌"+strings.Repeat("─", helpInner)+"┐"); row++
+	line(row, "  │"+helpContent+"│"); row++
+	line(row, "  └"+strings.Repeat("─", helpInner)+"┘"); row++
+	sb.WriteString("\033[0m")
+
+	for ; row <= t.termHeight; row++ {
+		sb.WriteString(fmt.Sprintf("\033[%d;1H\033[K", row))
+	}
 }
 
 func (t *TUI) computePeaks(stats engine.Stats) float64 {
