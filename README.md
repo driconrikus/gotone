@@ -143,6 +143,10 @@ If you find GoTone useful, consider buying me a coffee:
 
 [![PayPal](https://img.shields.io/badge/Donate-PayPal-blue.svg)](https://www.paypal.com/paypalme/driconrikus)
 
+## Disclaimer
+
+This project was developed with AI assistance (opencode) as part of learning Go. The code may not follow all idiomatic conventions or production best practices, but it's a genuine effort to build something useful while learning. Feedback, suggestions, and contributions are welcome!
+
 ## License
 
 MIT
